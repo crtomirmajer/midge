@@ -74,5 +74,5 @@ def compare(baseline_file: str, report_file: str) -> None:
 
 
 midgectl.add_command(run)
-midgectl.add_command(analyze)
+midgectl.add_command(analyze_logs)
 midgectl.add_command(compare)
