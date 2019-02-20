@@ -2,6 +2,12 @@
 Lightweight, protocol agnostic, versatile performance testing framework, that can be used 
 to test HTTP servers, gRPC services, databases and much more!
 
+## Install
+
+Using `pip`:
+
+    pip install git+https://github.com/crtomirmajer/midge.git
+
 ## Core concepts
 
 * `midge.Midge` represents a single agent (user) on a target system; 
