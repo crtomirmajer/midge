@@ -45,7 +45,7 @@ def run(file_path: str, analyze: bool) -> None:
 
         files.append(log_file)
 
-    if analyze_logs:
+    if analyze:
         analyze_logs(files)
 
 
@@ -54,7 +54,7 @@ def run(file_path: str, analyze: bool) -> None:
 def analyze_logs(files: List[str]) -> None:
     reports = {}
     for file_name in files:
-        logs: List[ActionLog] = record.load(file_name, ActionLog)
+        logs: List[ActionLog] = record.load(file_name, List[ActionLog])
         name = file_name.split('.')[0]
         report = core.analyze(logs)
         report[name] = report

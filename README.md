@@ -12,7 +12,7 @@ Using `pip`:
 
 * `midge.Midge` represents a single agent (user) on a target system; 
 * `midge.action` contains the logic for executing single action on the target system (typically hitting one endpoint);
-* `midge.Task` is a definition of a task, typically consisted of multiple actions and executed by multiple agents;
+* `<Task>` is a definition of a task, typically consisted of multiple actions and executed by multiple agents;
 * `midge.swarm` is a pool of agents executing a provided task at the same time;
 
 ## Examples
@@ -30,7 +30,7 @@ Using `pip`:
         rps_rate=5000,
         total_requests=50000,
     )
-    class DummyTask(midge.Task):
+    class DummyTask:
         url = 'http://0.0.0.0:8000'
         
         @midge.action()
