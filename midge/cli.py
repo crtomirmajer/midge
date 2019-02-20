@@ -32,7 +32,7 @@ def midgectl() -> None:
 @click.command(name='run', help='- Run a LOAD-TEST and output a LOG file')
 @click.option('--file-path', '-f', type=str, required=True, help='Midge LOAD-TEST definition file (.py)')
 @click.option('--analyze', '-a', type=bool, is_flag=True, help='Analyze LOGS after LOAD-TEST is finished')
-def run(file_path: str, analyze_logs: bool) -> None:
+def run(file_path: str, analyze: bool) -> None:
     swarm_constructors = import_midge_file(file_path)
     files = []
 
@@ -46,12 +46,12 @@ def run(file_path: str, analyze_logs: bool) -> None:
         files.append(log_file)
 
     if analyze_logs:
-        analyze(files)
+        analyze_logs(files)
 
 
 @click.command(name='analyze', help='- Analyze LOG file(s) and create a REPORT')
 @click.option('--files', '-f', type=str, required=True, multiple=True, help='Load-Test LOG file(s)')
-def analyze(files: List[str]) -> None:
+def analyze_logs(files: List[str]) -> None:
     reports = {}
     for file_name in files:
         logs: List[ActionLog] = record.load(file_name, ActionLog)
