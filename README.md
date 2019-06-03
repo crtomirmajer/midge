@@ -13,32 +13,38 @@ Using `pip`:
 * `midge.Midge` represents a single agent (user) on a target system; 
 * `midge.action` contains the logic for executing single action on the target system (typically hitting one endpoint);
 * `<Task>` is a definition of a task, typically consisted of multiple actions and executed by multiple agents;
-* `midge.swarm` is a pool of agents executing a provided task at the same time;
+* `midge.swarm` is a pool of agents executing a provided task concurrently;
 
 ## Examples
 
 ### HTTP
 
-    import urllib.request
-    
+    import aiohttp
+
     import midge
     from midge import ActionResult
     
     
     @midge.swarm(
-        population=5,
-        rps_rate=5000,
-        total_requests=50000,
+        population=10,
+        rps=100,
+        total_requests=5000,
     )
     class DummyTask:
-        url = 'http://0.0.0.0:8000'
-        
-        @midge.action()
-        def login(self) -> ActionResult:
-            contents = urllib.request.urlopen(f'{self.url}/parse').read()
-            return contents.decode('utf-8'), True
+        url = 'https://somewhere.on.the.webz'
     
-        @midge.action(weight=2)
-        def get_user(self) -> ActionResult:
-            contents = urllib.request.urlopen(f'{self.url}/get_user').read()
-            return contents.decode('utf-8'), True
+        async def setup(self):
+            self.session = aiohttp.ClientSession()
+    
+        @midge.action()
+        async def get_profile(self) -> ActionResult:
+            async with self.session.get(f'{self.url}/profile') as response:
+                return await response.text(), True
+    
+        @midge.action()
+        async def get_time(self) -> ActionResult:
+            async with self.session.get(f'{self.url}/time') as response:
+                return await response.text(), True
+    
+        async def teardown(self):
+            await self.session.close()
