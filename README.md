@@ -8,12 +8,22 @@ Using `pip`:
 
     pip install git+https://github.com/crtomirmajer/midge.git
 
+## Commands
+
+**run** performance test:
+
+    midge run performance_test.py
+
+**analyze** results:
+
+    midge analyze dummytest.log
+
 ## Core concepts
 
-* `midge.Midge` represents a single agent (user) on a target system; 
-* `midge.action` contains the logic for executing single action on the target system (typically hitting one endpoint);
-* `<Task>` is a definition of a task, typically consisted of multiple actions and executed by multiple agents;
-* `midge.swarm` is a pool of agents executing a provided task concurrently;
+* `midge.Midge` represents a single _agent_ (user) on a target system; 
+* `midge.action` contains the _logic_ for executing single action on the target system (typically hitting one endpoint);
+* `<Task>` definition of a performance test, consisting of multiple _actions_ and executed by multiple agents;
+* `midge.swarm` is a _pool_ of agents executing a provided task concurrently;
 
 ## Examples
 
