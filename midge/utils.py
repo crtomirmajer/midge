@@ -20,9 +20,6 @@ def import_midge_file(file_path: str) -> Dict[str, Callable[[], Swarm]]:
     if directory not in sys.path:
         sys.path.insert(0, directory)
         added_to_path = True
-    # If the directory IS in the PYTHONPATH, move it to the front temporarily,
-    # otherwise other locustfiles -- like Locusts's own -- may scoop the intended
-    # one.
     else:
         i = sys.path.index(directory)
         if i != 0:

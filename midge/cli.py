@@ -1,11 +1,11 @@
-from pprint import pprint
-from typing import List
+import asyncio
+import logging
+from typing import Callable, Dict, List
 
 import click
 
 import midge
-from midge import core, record
-from midge.core import ActionLog
+from midge import analysis, core, record
 from midge.utils import import_midge_file
 
 print(f""" 
@@ -23,6 +23,9 @@ print(f"""
                       -’             v{midge.__version__}          
     """)
 
+_loop = asyncio.get_event_loop()
+logging.basicConfig(format='level=%(levelname)s time="%(asctime)s" message="%(message)s"', level=logging.INFO)
+
 
 @click.group()
 def midgectl() -> None:
@@ -30,49 +33,61 @@ def midgectl() -> None:
 
 
 @click.command(name='run', help='- Run a LOAD-TEST and output a LOG file')
-@click.option('--file-path', '-f', type=str, required=True, help='Midge LOAD-TEST definition file (.py)')
-@click.option('--analyze', '-a', type=bool, is_flag=True, help='Analyze LOGS after LOAD-TEST is finished')
-def run(file_path: str, analyze: bool) -> None:
-    swarm_constructors = import_midge_file(file_path)
-    files = []
-
-    for name, constructor in swarm_constructors.items():
-        swarm = constructor()
-        logs = swarm.run()
-
-        log_file = f'{name}.log'
-        record.dump(logs, name)
-
-        files.append(log_file)
+@click.argument('file_path', type=click.STRING)
+@click.option('--analyze', '-a', type=bool, is_flag=True, help='Analyze LOGS after LOAD-TEST finishes')
+def run(file_path: str, analyze: bool, ) -> None:
+    swarms = import_midge_file(file_path)
+    logs = _loop.run_until_complete(_run(swarms))
+    logging.info(f'Logs are saved in {logs}')
 
     if analyze:
-        analyze_logs(files)
+        for log in logs:
+            reports = _analyze(log)
+            logging.info(f'Report saved in {reports}')
 
 
-@click.command(name='analyze', help='- Analyze LOG file(s) and create a REPORT')
-@click.option('--files', '-f', type=str, required=True, multiple=True, help='Load-Test LOG file(s)')
-def analyze_logs(files: List[str]) -> None:
-    reports = {}
-    for file_name in files:
-        logs: List[ActionLog] = record.load(file_name, List[ActionLog])
-        name = file_name.split('.')[0]
-        report = core.analyze(logs)
-        report[name] = report
-
-    pprint(record.dumps(reports))
+@click.command(name='analyze', help='- Analyze LOG file and create a REPORT')
+@click.argument('file_path', type=click.STRING)
+def analyze(file_path: str) -> None:
+    reports = _analyze(file_path)
+    logging.info(f'Report saved in {reports}')
 
 
 @click.command(name='compare', help='- Compare two REPORTS')
-@click.option('--baseline', '-b', type=str, required=True, help='Baseline REPORT file')
-@click.option('--report', '-r', type=str, required=True, help='New REPORT file')
-def compare(baseline_file: str, report_file: str) -> None:
-    baseline_full = record.load(baseline_file)
-    report_full = record.load(report_file)
-    comparison = core.compare(baseline_full, report_full)
+@click.argument('baseline', type=str, required=True)
+@click.argument('report', type=str, required=True)
+def compare(baseline: str, report: str) -> None:
+    baseline_full = record.load(baseline, record.FullReport)
+    report_full = record.load(report, record.FullReport)
+    comparison = analysis.compare(baseline_full, report_full)
 
-    pprint(record.dumps(comparison))
+    print(record.dumps(comparison))
 
+
+async def _run(swarms: Dict[str, Callable[[], core.Swarm]]) -> List[str]:
+    files = []
+    for name, init_swarm in swarms.items():
+        swarm = init_swarm()
+
+        await swarm.setup()
+        logs = await swarm.run()
+        await swarm.teardown()
+
+        log_file = f'{name.lower()}.log'
+        record.dump(logs, log_file)
+        files.append(log_file)
+
+    return files
+
+
+def _analyze(log_file: str) -> str:
+    logs = record.load(log_file, List[record.ActionLog])
+    name = log_file.split('.')[0]
+    report = analysis.analyze(logs)
+    report_file = f'{name}.report'
+    record.dump(report, report_file)
+    return report_file
 
 midgectl.add_command(run)
-midgectl.add_command(analyze_logs)
+midgectl.add_command(analyze)
 midgectl.add_command(compare)

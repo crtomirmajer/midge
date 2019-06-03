@@ -1,9 +1,11 @@
 import json
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, TypeVar, Union
 
 from dataclass_marshal import dataclass, marshal, unmarshal
+from numpy import NaN
 
 MidgeId = str
+T = TypeVar('T')
 
 
 class Record:
@@ -34,8 +36,8 @@ class RequestsReport(Record):
 
     def compare(self, b: 'RequestsReport') -> 'RequestsReport':
         return RequestsReport(
-            total=self.total / b.total,
-            avg_per_sec=self.avg_per_sec / b.avg_per_sec,
+            total=delta(self.total, b.total),
+            avg_per_sec=delta(self.avg_per_sec, b.avg_per_sec),
         )
 
 
@@ -54,16 +56,16 @@ class ResponseTimesReport(Record):
 
     def compare(self, b: 'ResponseTimesReport') -> 'ResponseTimesReport':
         return ResponseTimesReport(
-            total=self.total / b.total,
-            mean=self.mean / b.mena,
-            stdev=self.stdev / b.stdev,
-            min=self.min / b.min,
-            p50=self.p50 / b.p50,
-            p75=self.p75 / b.p75,
-            p90=self.p90 / b.p90,
-            p95=self.p95 / b.p95,
-            p99=self.p99 / b.p99,
-            max=self.max / b.max,
+            total=delta(self.total, b.total),
+            mean=delta(self.mean, b.mean),
+            stdev=delta(self.stdev, b.stdev),
+            min=delta(self.min, b.min),
+            p50=delta(self.p50, b.p50),
+            p75=delta(self.p75, b.p75),
+            p90=delta(self.p90, b.p90),
+            p95=delta(self.p95, b.p95),
+            p99=delta(self.p99, b.p99),
+            max=delta(self.max, b.max),
         )
 
 
@@ -76,9 +78,9 @@ class ResponsesReport(Record):
 
     def compare(self, b: 'ResponsesReport') -> 'ResponsesReport':
         return ResponsesReport(
-            success_rate=self.success_rate / b.success_rate,
-            succeeded=self.succeeded / b.succeeded,
-            failed=self.failed / b.failed,
+            success_rate=delta(self.success_rate, b.success_rate),
+            succeeded=delta(self.succeeded, b.succeeded),
+            failed=delta(self.failed, b.failed),
             response_times=self.response_times.compare(b.response_times),
         )
 
@@ -91,8 +93,8 @@ class PerformanceReport(Record):
 
     def compare(self, b: 'PerformanceReport') -> 'PerformanceReport':
         return PerformanceReport(
-            duration=self.duration / b.duration,
-            request=self.requests.compare(b.requests),
+            duration=delta(self.duration, b.duration),
+            requests=self.requests.compare(b.requests),
             responses=self.responses.compare(b.responses),
         )
 
@@ -101,6 +103,17 @@ FullReport = Dict[str, PerformanceReport]
 
 
 # Utils
+
+def delta(a: float, b: float) -> Dict[str, float]:
+    absolute = round(a - b, 3)
+    if b == 0:
+        relative = NaN
+    else:
+        relative = round(absolute / b, 3)
+    return {'relative': relative, 'absolute': absolute}
+
+
+# Serialization
 
 def dump(obj: WritableRecord, file_name: str) -> None:
     data = marshal(obj)
@@ -117,16 +130,16 @@ def dumps(obj: WritableRecord) -> str:
     return json.dumps(data, indent=2)
 
 
-def load(file_name: str, cls: Optional[type] = None) -> Union[WritableRecord, Dict[Any, Any]]:
+def load(file_name: str, cls: Optional[T] = None) -> T:
     with open(file_name.lower(), 'r') as input_file:
         data = json.load(input_file)
     return unmarshal(data, cls) if cls else data
 
 
-def loadd(payload: Dict[Any, Any], cls: type) -> WritableRecord:
+def loadd(payload: Dict[Any, Any], cls: T) -> T:
     return unmarshal(payload, cls)
 
 
-def loads(payload: str, cls: Optional[type] = None) -> Union[WritableRecord, Dict[Any, Any]]:
+def loads(payload: str, cls: Optional[T] = None) -> T:
     data = json.loads(payload)
     return loadd(data, cls) if cls else data
