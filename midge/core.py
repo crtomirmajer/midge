@@ -29,7 +29,10 @@ def action(weight: int = 1) -> AnyFunc:
 
     def decorator(func: ActionFunc) -> ActionFunc:
         async def midge_action(*args) -> ActionResult:
-            return await func(*args)
+            try:
+                return await func(*args)
+            except Exception:
+                return None, False
 
         midge_action.__midge_action__ = True
         midge_action.__weight__ = weight

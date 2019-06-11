@@ -50,7 +50,7 @@ def _analyze(logs: List[ActionLog]) -> PerformanceReport:
     duration = end - start
 
     # request / response analysis
-    succeeded = len([log.success for log in logs])
+    succeeded = sum(1 for log in logs if log.success)
     failed = count - succeeded
     success_rate = succeeded / count
     actual_avg_rps = count / (duration / 1000)
