@@ -1,10 +1,14 @@
 import asyncio
+import hashlib
 import itertools
 import logging
 import random
 from threading import Timer
 import time
 from typing import Any, Callable, Coroutine, List, Optional, Tuple, Union
+import uuid
+
+import math
 
 from midge.errors import MidgeValueError
 from midge.record import (
@@ -45,7 +49,8 @@ def action(weight: int = 1) -> AnyFunc:
 def swarm(population: int = 1,
           rps: Optional[int] = None,
           total_requests: Optional[int] = None,
-          duration: Optional[int] = None) -> AnyFunc:
+          duration: Optional[int] = None,
+          warm_up: Optional[int] = None) -> AnyFunc:
     global _swarm_counter
     _swarm_counter += 1
 
@@ -62,7 +67,8 @@ def swarm(population: int = 1,
                          population=population,
                          rps=rps,
                          total_requests=total_requests,
-                         duration=duration)
+                         duration=duration,
+                         warm_up=warm_up)
 
         midge_swarm.__midge_swarm_constructor__ = True
         return midge_swarm
@@ -128,16 +134,21 @@ class Midge:
     Represents a single worker executing a given task
     """
 
-    def __init__(self, identifier: int,
+    def __init__(self, identifier: str,
                  swarm: "Swarm",
                  task: Task,
                  on_action_complete: Callable[[Union[asyncio.Task, ActionLog]], None],
-                 rps: Optional[int] = None) -> None:
-        self._id = f'M{identifier}@{swarm._id}'
+                 rps: Optional[int] = None,
+                 chance_of_action: float = 1) -> None:
+        self._id = f'{identifier}@{swarm._id}'
         self._task = task
         self._on_action_complete = on_action_complete
         self._rps = rps
+        self._chance_of_action = chance_of_action
         self._active = True
+
+    def set_chance_of_action(self, chance_of_action):
+        self._chance_of_action = chance_of_action
 
     async def setup(self):
         await self._task.setup()
@@ -150,10 +161,10 @@ class Midge:
                 # run once per second to meet RPS requirements;
                 # randomly distribute requests over one second period,
                 # than wait for approximately 1 second before triggering again
-                start = time.time()
                 attacks = [self._perform_action(delay=_rand_delay()) for _ in range(self._rps)]
                 await asyncio.wait(attacks)
-                wait_duration = 1 - (time.time() - start)
+                fraction, _ = math.modf(time.time())
+                wait_duration = 1 - fraction
                 await asyncio.sleep(wait_duration)
             else:
                 # no RPS to meet, simply execute task one after another as previous one finishes
@@ -165,6 +176,13 @@ class Midge:
 
     async def _perform_action(self, wait: bool = False, delay: int = 0):
         await asyncio.sleep(delay)
+
+        if self._chance_of_action < 1 and random.random() > self._chance_of_action:
+            if wait:
+                # default to 1 sec sleep
+                await asyncio.sleep(1)
+            return
+
         if wait:
             res = await self._task.run(self._id)
             self._on_action_complete(res)
@@ -174,6 +192,9 @@ class Midge:
 
     def stop(self) -> None:
         self._active = False
+
+    def reset(self):
+        self._active = True
 
     async def teardown(self) -> None:
         await self._task.teardown()
@@ -187,25 +208,45 @@ class Swarm:
     def __init__(self, identifier: int,
                  task_definition: type,
                  population: int = 1,
-                 rps: int = None,
-                 total_requests: int = None,
-                 duration: int = None):
+                 rps: Optional[int] = None,
+                 total_requests: Optional[int] = None,
+                 duration: Optional[int] = None,
+                 warm_up: Optional[int] = None):
         self._id = f'S{identifier}'
         self._task_definition = task_definition
         self._population = population
         self._rps = rps
         self._total_requests_limit = total_requests
         self._duration = duration
+        self._warm_up = warm_up
         self._total_requests_counter = itertools.count()
         self._active = False
 
     async def setup(self):
-        self._midges = self._spawn_midges(self._population)
+        self._midges = self._spawn_midges(self._population, self._rps)
         coros = [midge.setup() for midge in self._midges]
         await asyncio.gather(*coros)
         logging.info(f'Swarm {self._id} with {len(self._midges)} Midges is ready')
 
+    async def warmup(self, steps: int = 10) -> None:
+        step_time = self._warm_up / steps
+        # Gradually increase chance of action for midges
+        for i in range(steps):
+            Timer(i * step_time, self._modify_midges, kwargs=dict(chance_of_action=i / steps)).start()
+        # End warm-up
+        Timer(self._warm_up, self.stop, kwargs=dict(reason='Warm-up finished')).start()
+
+        coros = [midge.run() for midge in self._midges]
+        await asyncio.gather(*coros)
+
+        self._modify_midges(1)
+        [midge.reset() for midge in self._midges]
+
     async def run(self) -> List[ActionLog]:
+
+        if self._warm_up:
+            await self.warmup()
+
         self._active = True
         self._logs = []
 
@@ -223,7 +264,7 @@ class Swarm:
         return self._logs
 
     def stop(self, reason: str):
-        logging.info(f'Stopping Midges {reason}')
+        logging.info(f'Stopping Midges - {reason}')
         self._active = False
         for t in self._midges:
             t.stop()
@@ -235,22 +276,27 @@ class Swarm:
 
     # Utils
 
-    def _spawn_midges(self, n: int) -> List[Midge]:
+    def _spawn_midges(self, n: int, rps: int) -> List[Midge]:
         rps_per_midges = [None] * n
-        if self._rps:
+        if rps:
             # distribute RPS rate across midges
-            rps_per_midge = int(self._rps / n)
-            rps_remaining = self._rps - (rps_per_midge * n)
+            rps_per_midge = int(rps / n)
+            rps_remaining = rps - (rps_per_midge * n)
             rps_per_midges = [rps_per_midge + 1 if i < rps_remaining else rps_per_midge
                               for i, _ in enumerate(rps_per_midges)]
         return [
-            Midge(identifier=i + 1,
+            Midge(identifier=str(hashlib.md5(uuid.uuid4().bytes).hexdigest()[:6]),
                   swarm=self,
                   task=Task(self._task_definition),
                   on_action_complete=self._on_action_complete,
                   rps=rps)
             for i, rps in enumerate(rps_per_midges)
         ]
+
+    def _modify_midges(self, chance_of_action: float):
+        logging.info(f'Modifying midges - COA={chance_of_action}')
+        for midge in self._midges:
+            midge.set_chance_of_action(chance_of_action)
 
     # Callbacks
 
