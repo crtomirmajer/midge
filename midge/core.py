@@ -19,7 +19,9 @@ ActionResult = Tuple[Any, bool]
 ActionFunc = Callable[[Any], Coroutine[Any, Any, ActionResult]]
 AnyFunc = Callable[[Any], Any]
 
+TIME_PRECISION = 1000
 ROUND_PRECISION = 3
+WAIT_SEC = 0.99999
 
 _loop = asyncio.get_event_loop()
 _swarm_counter = 0
@@ -161,14 +163,14 @@ class Midge:
                 # run once per second to meet RPS requirements;
                 # randomly distribute requests over one second period,
                 # than wait for approximately 1 second before triggering again
-                attacks = [self._perform_action(delay=_rand_delay()) for _ in range(self._rps)]
+                attacks = [self._perform_action(delay=rand_delay()) for _ in range(self._rps)]
                 await asyncio.wait(attacks)
                 fraction, _ = math.modf(time.time())
-                wait_duration = 1 - fraction
+                wait_duration = WAIT_SEC - fraction
                 await asyncio.sleep(wait_duration)
             else:
                 # no RPS to meet, simply execute task one after another as previous one finishes
-                delay = _rand_delay() if i == 0 else 0  # delay first request
+                delay = rand_delay() if i == 0 else 0  # delay first request
                 await self._perform_action(wait=True, delay=delay)
             i += 1
 
@@ -180,7 +182,7 @@ class Midge:
         if self._chance_of_action < 1 and random.random() > self._chance_of_action:
             if wait:
                 # default to 1 sec sleep
-                await asyncio.sleep(1)
+                await asyncio.sleep(WAIT_SEC)
             return
 
         if wait:
@@ -312,13 +314,9 @@ class Swarm:
             result = result.result()
         self._logs.append(result)
 
-
-# Core Functions
-
-
 # Utils
 
-def _rand_delay(min: float = 0., max: float = 1.) -> int:
+def rand_delay(min: float = 0., max: float = 1.) -> int:
     # return random delay in seconds
     if min >= max:
         raise ValueError('Invalid range - max must be bigger than min')
@@ -327,4 +325,4 @@ def _rand_delay(min: float = 0., max: float = 1.) -> int:
 
 def now() -> float:
     # return current time in milliseconds
-    return round(time.time() * 1000)
+    return round(time.time() * TIME_PRECISION)

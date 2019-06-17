@@ -17,12 +17,15 @@ setup(
         'asyncio',
         'click',
         'numpy',
-        'dataclass-marshal==0.1.0'
+        'dataclass-marshal==0.1.0',
     ],
     extras_require={
         'unit-tests': [
             'pytest==3.6.4',
             'pytest-asyncio==0.9.0',
+        ],
+        'visualize': [
+            'seabor==0.9.0'
         ]
     },
     include_package_data=True,

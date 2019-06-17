@@ -102,6 +102,14 @@ class PerformanceReport(Record):
 FullReport = Dict[str, PerformanceReport]
 
 
+@dataclass
+class DataPoint(Record):
+    action: str
+    timepoint: float
+    response_time: float
+    success: int
+
+
 # Utils
 
 def delta(a: float, b: float) -> Dict[str, float]:
